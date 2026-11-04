@@ -1,0 +1,11 @@
+# 密钥：配置文件默认在 ~/.config/wx-article/，这里再兜一层，防止有人把它放进仓库
+config.json
+
+# Claude Code 的本机设置（/add-dir 等会写进来，含本机路径）
+.claude/
+
+# 运行产物
+__pycache__/
+*.pyc
+articles/
+dist/

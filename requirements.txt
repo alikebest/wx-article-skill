@@ -1,0 +1,6 @@
+mistune>=3.0
+requests>=2.28
+beautifulsoup4>=4.12   # 抓取
+markdownify>=0.11      # 抓取
+Pillow>=10.0           # 图片压缩、webp 转 PNG
+# playwright>=1.40     # 可选：正文里有 SVG 图片时才需要（用本机 Edge/Chrome 渲染）

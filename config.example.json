@@ -1,0 +1,10 @@
+{
+  "default": "main",
+  "accounts": {
+    "main": {
+      "appid": "这里填你的AppID（公众号后台 设置与开发 → 基本配置）",
+      "secret": "这里填你的AppSecret（同上，未启用的需先启用）",
+      "author": "这里填默认作者名（可留空；文章 front matter 写了 author 时以文章为准）"
+    }
+  }
+}
