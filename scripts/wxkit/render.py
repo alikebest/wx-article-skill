@@ -93,6 +93,22 @@ def plain(html: str) -> str:
     return re.sub(r"<[^>]+>", "", html).strip()
 
 
+# 公众号会删掉没有内容的元素。列表小方块/圆点、标题前的色条和圆点、分割线都是空 span/section 画的，
+# 推送后整个消失；列表段落的悬挂缩进还在，于是折行比首行多缩进一截。
+# 往里塞一个 &nbsp; 让它“有内容”：line-height:0 不撑高、font-size:0 不占宽，
+# overflow:hidden 让 inline-block 的基线仍在底边（和空元素一样），显示效果不变。
+EMPTY_DECOR_RE = re.compile(r'<(span|section) style="([^"]*)"></\1>')
+KEEP_EMPTY_STYLE = "font-size:0;line-height:0;overflow:hidden;"
+
+
+def keep_empty_decor(html: str) -> str:
+    def fill(m):
+        tag, style = m.groups()
+        sep = "" if not style or style.endswith(";") else ";"
+        return f'<{tag} style="{style}{sep}{KEEP_EMPTY_STYLE}">&nbsp;</{tag}>'
+    return EMPTY_DECOR_RE.sub(fill, html)
+
+
 def decorate(html: str) -> str:
     """在 mistune 输出上做结构标注，主题据此选样式（data-* 属性不会输出到最终 HTML）：
     - h2 编号：data-num="01"……；“附”开头的小标题不编号；可编号的不足 2 个时整篇不编号。

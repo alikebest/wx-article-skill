@@ -11,6 +11,8 @@
   python wxflow.py config --add <账号名>                       新增一个账号（之后自己用编辑器填写）
   python wxflow.py config --default <账号名>                   设置默认账号
   python wxflow.py themes                                     列出排版主题
+  python wxflow.py gallery [--no-open] [-o 路径]              模板列表：所有主题的风格、特点、适合类型和预览，用浏览器打开
+                                                              （也可以写成 python wxflow.py 模板列表）
 
 多个公众号：推送用哪个账号，按 --account > 文章头信息 account > 环境变量账号 > 默认账号 选择。
 重写、美化、排版由 Claude 按 skill 里的 references/*.md 完成，不在这里。
@@ -117,8 +119,18 @@ def cmd_config(args):
 
 def cmd_themes(args):
     from wxkit.themes import DEFAULT_THEME, THEMES
+    w = max(map(len, THEMES)) + 2
     for k, (name, desc) in THEMES.items():
-        print(f"{k:9s}{name}{'（默认）' if k == DEFAULT_THEME else ''}\n         {desc}")
+        print(f"{k:{w}s}{name}{'（默认）' if k == DEFAULT_THEME else ''}\n{'':{w}s}{desc}")
+    return 0
+
+
+def cmd_gallery(args):
+    from wxkit import gallery
+    out = gallery.build(Path(args.out) if args.out else None)
+    print(f"模板列表：{out}")
+    if not args.no_open:
+        webbrowser.open(out.resolve().as_uri())
     return 0
 
 
@@ -164,6 +176,11 @@ def main(argv=None):
 
     p = sub.add_parser("themes", help="列出排版主题")
     p.set_defaults(func=cmd_themes)
+
+    p = sub.add_parser("gallery", aliases=["模板列表"], help="模板列表：所有主题的风格、特点、适合类型和预览（默认用浏览器打开）")
+    p.add_argument("--no-open", action="store_true", help="只生成，不打开浏览器")
+    p.add_argument("-o", "--out", metavar="路径", help="写到指定路径（默认写到系统临时目录 wx-article/模板列表.html）")
+    p.set_defaults(func=cmd_gallery)
 
     args = parser.parse_args(argv)
     try:

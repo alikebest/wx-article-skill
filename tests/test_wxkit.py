@@ -171,7 +171,7 @@ def test_pink_theme():
     assert html.count("<p") == html.count("</p>")
 
 
-ENGINE_THEMES = ("neu", "clay", "flat", "minimal", "bento")
+ENGINE_THEMES = ("neu", "flat", "minimal", "bento", "match", "term", "editorial", "blueprint", "pixel")
 THEME_SAMPLE = (
     "导语。\n\n## 一、**甲**\n\n正文 *重点*\n\n![图注](a.png)\n\n## 乙\n\n"
     "> 💡 技巧\n\n> ⚠️\n>\n> 注意事项\n\n### 小节\n\n- 项\n\n1. 步\n\n---\n\n"
@@ -199,6 +199,28 @@ def test_engine_themes():
         assert "<script" not in _render("<script>x</script>\n\n[x](javascript:alert(1))", name), name
     flat = get_builder("flat")(THEME_SAMPLE)[0]
     assert "box-shadow" not in flat and "gradient" not in flat, "扁平化不能有阴影和渐变"
+
+
+def test_no_empty_decor():
+    from wxkit.themes import THEMES
+    for name in THEMES:
+        html = get_builder(name)(THEME_SAMPLE + "\n\n- 列表项\n  - 嵌套项")[0]
+        empty = re.findall(r"<(span|section)\b[^>]*></\1>", html)
+        assert not empty, f"{name}: 空元素会被公众号删掉（列表符号消失、折行缩进错位）"
+
+
+def test_gallery():
+    import tempfile
+    from wxkit import gallery
+    from wxkit.themes import THEMES
+    assert set(gallery.THEME_INFO) == set(THEMES), "模板列表的主题说明要和 THEMES 一一对应"
+    with tempfile.TemporaryDirectory() as d:
+        out = gallery.build(Path(d) / "模板列表.html")
+        page = out.read_text(encoding="utf-8")
+    assert page.count('class="card"') == len(THEMES)
+    for t in THEMES:
+        assert f'id="{t}"' in page and f'href="#{t}"' in page, t
+    assert gallery.SAMPLE_IMG not in page and "data:image/svg+xml;base64," in page, "示例图要换成内嵌示意图"
 
 
 def test_stats_lists():

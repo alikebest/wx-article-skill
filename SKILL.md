@@ -1,7 +1,7 @@
 ---
 name: wx-article
 description: 微信公众号文章工作流：抓取公众号文章（mp.weixin.qq.com 链接）、重写别人的文章、美化润色自己写的稿子、按主题排版并本地预览、推送到公众号草稿箱。用户提到公众号、草稿箱、公众号排版，要把文章改写/润色后发公众号，或者给出 mp.weixin.qq.com 链接时使用。每一步都可以单独用，输入任意 Markdown 文件。
-argument-hint: "[抓取|重写|美化|排版|推送] <链接或 md 路径>"
+argument-hint: "[抓取|重写|美化|排版|推送|模板列表] <链接或 md 路径>"
 ---
 
 # 公众号文章工作流
@@ -22,6 +22,7 @@ argument-hint: "[抓取|重写|美化|排版|推送] <链接或 md 路径>"
 - 要把**别人的**文章"重写""改写""用自己的话写" → 重写
 - 要把**自己写的**稿子"润色""美化""整理一下" → 美化。拿不准稿子是谁写的，问一句
 - "排版""预览""看看效果""换个主题" → 排版
+- "模板列表""有哪些主题/模板""看看各个主题长什么样" → 运行 `gallery`，打开模板列表页（不需要文章，不联网）
 - "推送""发到草稿箱""发公众号" → 推送
 
 一次要求多步（如"重写后排版"）就按 抓取 → 重写或美化 → 排版 → 推送 的顺序依次做，后一步的输入是前一步的输出。重写已经包含去 AI 味的润色，不用再美化。
@@ -49,7 +50,8 @@ argument-hint: "[抓取|重写|美化|排版|推送] <链接或 md 路径>"
 | `push <md> [--account 账号]` | 推送到草稿箱。先自动检查，有错误就拒绝，不调用任何接口 |
 | `config` | 列出所有账号：哪个是默认、密钥填没填（不显示密钥）、作者名 |
 | `config --init` / `--add <账号名>` / `--default <账号名>` | 生成配置文件 / 新增账号 / 设置默认账号 |
-| `themes` | 列出排版主题 |
+| `themes` | 列出排版主题（纯文字） |
+| `gallery [--no-open] [-o 路径]`（也可写成 `模板列表`） | 生成模板列表页并用浏览器打开：每套主题的风格、特点、适合类型和同一篇示例文章的预览。默认写到系统临时目录的 `wx-article/模板列表.html`，每次都重新生成 |
 
 脚本报缺少依赖时，告诉用户运行 `pip install -r "<skill目录>/requirements.txt"`。
 
@@ -64,7 +66,7 @@ argument-hint: "[抓取|重写|美化|排版|推送] <链接或 md 路径>"
 | `digest` | 摘要，≤120 字；留空则自动取正文开头 |
 | `cover` | 封面图，路径相对本 md 文件。排版时固定写成 `cover.jpg`（见「封面」） |
 | `thumb_media_id` | 已上传过的封面素材 ID，优先于 cover，不会重复上传 |
-| `theme` | 排版主题：`lime`（默认）、`pink`、`neu`、`clay`、`flat`、`minimal`、`bento`，怎么选见 [references/layout.md](references/layout.md) |
+| `theme` | 排版主题：`lime`（默认）、`pink`、`neu`、`flat`、`minimal`、`bento`、`match`、`term`、`editorial`、`blueprint`、`pixel`，怎么选见 [references/layout.md](references/layout.md) |
 | `account` | 推送到哪个公众号（配置里的账号名），不写则用默认账号，见「多个公众号」 |
 | `source_url` / `source_author` / `source_time` | 来源信息，抓取时写入 |
 

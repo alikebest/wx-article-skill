@@ -1,8 +1,8 @@
-"""主题排版引擎：neu / clay / flat / minimal / bento 共用（不是主题，不登记到 THEMES）。
+"""主题排版引擎：neu / flat / minimal / bento / match / term / editorial / blueprint / pixel 共用（不是主题，不登记到 THEMES）。
 
 一个主题 = 一个 Theme 子类：
   STYLE            各元素的内联样式（键名见 Theme.style_for）
-  CONTAINER        外层容器样式；新拟态、黏土这类需要浅色底的主题才填
+  CONTAINER        外层容器样式；新拟态、杂志、蓝图这类需要整篇底色的主题才填
   h2 / h2_plain / h3                 小标题结构
   quote_label / lead_label           提示卡、导语卡开头的小标题
   hr / figcap / ul_mark / ol_mark    分割线、图注、列表符号

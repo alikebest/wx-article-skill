@@ -10,6 +10,7 @@
 | 美化 | "帮我润色 我的稿子.md"（自己的稿子） | `我的稿子.polish.md` |
 | 排版 | "用粉色主题排版 xxx.md" | `xxx.layout.md` + `xxx.layout.html`（预览） |
 | 推送 | "把 xxx.layout.md 推送到草稿箱" | 公众号草稿 + `xxx.push.md`（推送记录） |
+| 模板列表 | "模板列表""有哪些主题" | 用浏览器打开模板列表页：每套主题的风格、特点、适合类型和预览 |
 
 重写、美化、排版由 Claude 完成，用的是你当前对话里的模型，不需要额外的 AI 接口。
 
@@ -73,7 +74,8 @@ python scripts/wxflow.py push <文章.md>              # 推送到草稿箱（--
 python scripts/wxflow.py config                      # 所有账号的配置状态（不显示密钥）
 python scripts/wxflow.py config --add <账号名>        # 新增账号
 python scripts/wxflow.py config --default <账号名>    # 设置默认账号
-python scripts/wxflow.py themes                      # 排版主题
+python scripts/wxflow.py themes                      # 排版主题（纯文字）
+python scripts/wxflow.py gallery                     # 模板列表页（也可写成 模板列表），用浏览器打开
 ```
 
 ## front matter
@@ -85,26 +87,30 @@ author: 作者（≤16 字，留空用配置里的 author）
 digest: 摘要（≤120 字，留空自动取正文开头）
 cover: cover.jpg            # 必填，路径相对本 md。排版时固定写成 cover.jpg，封面图就用这个名字放在 md 旁边
 thumb_media_id: MEDIA_ID    # 可选，复用已上传的封面，优先于 cover
-theme: lime                 # lime（默认）/ pink / neu / clay / flat / minimal / bento，见下方「排版主题」
+theme: lime                 # lime（默认）/ pink / neu / flat / minimal / bento / match / term / editorial / blueprint / pixel，见下方「排版主题」
 account: life               # 可选，推送到哪个公众号；不写用默认账号
 ---
 ```
 
 ## 排版主题
 
-在 front matter 里写 `theme: <主题>`，或者对 Claude 说"用夸张极简排版"。
+在 front matter 里写 `theme: <主题>`，或者对 Claude 说"用夸张极简排版"。想先看每套主题长什么样，对 Claude 说"模板列表"，或者运行 `python scripts/wxflow.py gallery`。
 
 | 主题 | 风格 | 适合 |
 |---|---|---|
 | `lime`（默认） | 荧光柠绿 · 新粗野主义：黑白高对比、粗描边硬阴影 | AI 工具、独立开发、科技资讯 |
 | `pink` | 樱花粉 · 荧光笔：柔和手账风 | 数码好物、轻松话题、生活类 |
 | `neu` | 新拟态：同色浮雕，只靠阴影做凸起凹陷 | 硬件评测、参数对比（深色模式下浮雕感会消失） |
-| `clay` | 黏土拟态：马卡龙色、超大圆角、三层阴影 | 科普小报、数码入门 |
 | `flat` | 扁平化：纯色块，零阴影零渐变 | 日更资讯，深色模式最稳 |
 | `minimal` | 夸张极简：超大字号、大量留白、一个强调色 | 观点、深度解读、年度盘点 |
 | `bento` | 便当盒网格：开头自动生成"本期速览"格子盒 | 周报、发布会总结 |
+| `match` | 赛事战报：黑黄红高对比、斜切色块、计分板 | 电竞、体育、A vs B 对比 |
+| `term` | 终端：墨绿提示符、终端窗口代码块、日志式提示卡 | 配置教程、命令行工具 |
+| `editorial` | 杂志社论：衬线标题、首字下沉、拉页金句、三线表 | 深度长文、人物故事 |
+| `blueprint` | 工程图纸：浅蓝网格、标题栏小标题、尺寸线 | 硬件拆解、原理图解 |
+| `pixel` | 像素 8-bit：像素边框、像素爱心、血条分割线 | 游戏内容、轻松八卦 |
 
-后五个主题额外认一种**数据列表**：无序列表 1~3 项，每项都是 `**数值** 简短说明`，会排成各主题的数据组件（数据圆盘、数据卡、数据磁贴、超大数字、便当数据格）：
+`lime`、`pink` 以外的主题额外认一种**数据列表**：无序列表 1~3 项，每项都是 `**数值** 简短说明`，会排成各主题的数据组件（数据圆盘、数据磁贴、超大数字、便当数据格、计分板、参数格等）：
 
 ```markdown
 - **35dB** 降噪深度
@@ -132,6 +138,6 @@ references/            各步骤的详细规范，Claude 用到时才读
   layout.md            排版：front matter、主题写法、允许的格式调整
   titles.md            标题与摘要规则
 scripts/wxflow.py      统一入口
-scripts/wxkit/         实现：抓取、主题、检查、预览、推送、配置
+scripts/wxkit/         实现：抓取、主题、检查、预览、推送、配置、模板列表
 tests/test_wxkit.py    本地回归测试（不调用接口）：python tests/test_wxkit.py
 ```
