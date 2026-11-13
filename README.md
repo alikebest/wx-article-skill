@@ -3,9 +3,13 @@
 给 Claude Code 用的 skill：抓取公众号文章 → 重写或美化 → 排版预览 → 推送到草稿箱。
 每一步都可以单独用，输入任意 Markdown，输出写在输入旁边，不改原文件。
 
+一篇文章一个文件夹（如 `2026-11-12-01`），这篇的所有产物和封面都在里面。
+
 | 操作 | 怎么说 | 产出 |
 |---|---|---|
-| 抓取 | "抓取 https://mp.weixin.qq.com/s/xxx" | `articles/<日期_标题>/article.md` + `images/` |
+| 新建 | "新建一篇，标题是 xxx" | `<根目录>/<年-月-日-序号>/article.md` |
+| 列出 | "有哪些文章" | 每篇的文件夹、标题、进度 |
+| 抓取 | "抓取 https://mp.weixin.qq.com/s/xxx" | `<根目录>/<年-月-日-序号>/article.md` + `images/` |
 | 重写 | "把 article.md 重写一下"（别人的文章） | `article.facts.md` + `article.rewrite.md` |
 | 美化 | "帮我润色 我的稿子.md"（自己的稿子） | `我的稿子.polish.md` |
 | 排版 | "用粉色主题排版 xxx.md" | `xxx.layout.md` + `xxx.layout.html`（预览） |
@@ -25,11 +29,36 @@ pip install -r ~/.claude/skills/wx-article/requirements.txt
 
 # 3. 生成配置文件，然后用编辑器打开它，自己填 appid / secret / author
 python ~/.claude/skills/wx-article/scripts/wxflow.py config --init
+
+# 4. 设置文章根目录：所有文章都放在这里
+python ~/.claude/skills/wx-article/scripts/wxflow.py config --root D:/公众号文章
 ```
 
 Windows 下 `~` 是 `C:\Users\<你的用户名>`。重开一个 Claude Code 会话，输入 `/` 能看到 `wx-article` 就装好了。
 
 只想在某个项目里用，就放到 `<项目>/.claude/skills/wx-article/`。
+
+## 文章文件夹
+
+```
+D:/公众号文章/                  ← 根目录，config --root 设置
+├── 2026-11-12-01/              ← new 新建：自己写的稿子
+│   ├── article.md
+│   ├── article.polish.md
+│   ├── article.layout.md / .layout.html
+│   ├── article.push.md
+│   └── cover.jpg
+└── 2026-11-12-02/              ← fetch 抓取：别人的文章
+    ├── article.md
+    ├── images/
+    └── ...
+```
+
+- **命名**：`年-月-日-序号`，日期是建文件夹那天。序号取当天已有的最大值加 1，删掉中间某篇也不会撞号。
+- **根目录**：`-o` > 环境变量 `WX_ARTICLE_DIR` > 配置文件 `articles_dir` > 当前目录下的 `articles/`。没配置时每次都会提示；序号只在同一个根目录里不重复，所以建议固定下来。
+- **抓取**：同一篇以前抓过（链接相同，或者标题、作者、发布时间都相同）就沿用原文件夹。`--into <文件夹>` 可以抓到已有文件夹里，比如先 `new` 了一篇空的；文件夹里已经有别的正文时会拒绝覆盖。
+- **进度**：`list` 根据文件夹里已有哪些文件推断进度，不另记状态。
+- 以前按 `日期_标题` 命名的旧文件夹不用改，`list` 照样列出，重新抓取也会沿用。
 
 ## 配置与密钥
 
@@ -67,13 +96,16 @@ Windows 下 `~` 是 `C:\Users\<你的用户名>`。重开一个 Claude Code 会�
 ## 不通过 Claude，直接用命令行
 
 ```bash
-python scripts/wxflow.py fetch <链接> [-o 根目录]   # 抓取，默认存到 ./articles
+python scripts/wxflow.py new [--title 标题]          # 新建文章文件夹
+python scripts/wxflow.py list                        # 列出所有文章和进度
+python scripts/wxflow.py fetch <链接> [--into 文件夹] # 抓取，不带 --into 时自动新建文件夹
 python scripts/wxflow.py check <文章.md>             # 推送前检查（不联网）
 python scripts/wxflow.py preview <文章.md> --open    # 本地预览（不联网）
 python scripts/wxflow.py push <文章.md>              # 推送到草稿箱（--account 指定账号）
 python scripts/wxflow.py config                      # 所有账号的配置状态（不显示密钥）
 python scripts/wxflow.py config --add <账号名>        # 新增账号
 python scripts/wxflow.py config --default <账号名>    # 设置默认账号
+python scripts/wxflow.py config --root <路径>         # 设置文章根目录
 python scripts/wxflow.py themes                      # 排版主题（纯文字）
 python scripts/wxflow.py gallery                     # 模板列表页（也可写成 模板列表），用浏览器打开
 ```

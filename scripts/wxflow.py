@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 """wx-article 统一入口：公众号文章的抓取、检查、预览、推送。
 
-每个命令都只接一个 md（或链接），彼此独立，可以单独使用：
-  python wxflow.py fetch <公众号文章链接> [-o 根目录]          抓取 → <根目录>/<日期_标题>/article.md
+一篇文章一个文件夹：<根目录>/<年-月-日-序号>/，如 2026-11-12-01，后续每一步的产物都写在里面。
+  python wxflow.py new [--title 标题]                          新建文章 → <根目录>/<年-月-日-序号>/article.md
+  python wxflow.py list                                       列出所有文章：文件夹、标题、进度
+  python wxflow.py fetch <公众号文章链接> [--into 文件夹]       抓取 → 新建文件夹，抓过同一篇则沿用原文件夹
   python wxflow.py check <文章.md> [--account 账号]            推送前检查，不联网
   python wxflow.py preview <文章.md> [--open] [--account 账号] 生成本地预览页 <文章>.html，不联网
   python wxflow.py push <文章.md> [更多.md ...] [--account 账号] 推送到草稿箱，记录写入 <文章>.push.md
@@ -10,10 +12,12 @@
   python wxflow.py config --init                              生成配置文件
   python wxflow.py config --add <账号名>                       新增一个账号（之后自己用编辑器填写）
   python wxflow.py config --default <账号名>                   设置默认账号
+  python wxflow.py config --root <路径>                        设置固定的文章根目录
   python wxflow.py themes                                     列出排版主题
   python wxflow.py gallery [--no-open] [-o 路径]              模板列表：所有主题的风格、特点、适合类型和预览，用浏览器打开
                                                               （也可以写成 python wxflow.py 模板列表）
 
+文章根目录：-o > 环境变量 WX_ARTICLE_DIR > 配置 articles_dir（config --root 设置）> 当前目录下的 articles/。
 多个公众号：推送用哪个账号，按 --account > 文章头信息 account > 环境变量账号 > 默认账号 选择。
 重写、美化、排版由 Claude 按 skill 里的 references/*.md 完成，不在这里。
 
@@ -35,11 +39,45 @@ for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(errors="replace")
 
 
+def _root(args):
+    from wxkit import workspace
+    root, source = workspace.resolve_root(args.root)
+    if not source:
+        print(f"[提示] 还没有配置固定的文章根目录，这次用的是 {root}。"
+              "运行 config --root <路径> 固定下来，否则在不同位置运行，序号会各自从 01 开始")
+    return root
+
+
+def cmd_new(args):
+    from wxkit import workspace
+    md = workspace.new_article(_root(args), args.title or "")
+    print(f"已新建：{md.parent.name}")
+    print(f"文章：{md}")
+    print("在 article.md 里写正文；之后重写、排版、推送的产物和封面 cover.jpg 都放在这个文件夹里")
+    return 0
+
+
+def cmd_list(args):
+    from wxkit import workspace
+    root = _root(args)
+    rows = workspace.entries(root)
+    print(f"文章根目录：{root}")
+    if not rows:
+        print("  还没有文章，运行 new 新建一篇，或者 fetch 抓取一篇")
+        return 0
+    for e in rows:
+        print("  " + workspace.format_entry(e))
+    print(f"共 {len(rows)} 篇")
+    return 0
+
+
 def cmd_fetch(args):
     from wxkit import fetch
-    root = Path(args.out) if args.out else Path.cwd() / "articles"
-    d = fetch.fetch(args.url, root)
-    print(f"已保存：{d['path']}" + ("（覆盖了之前抓取的版本）" if d["overwritten"] else ""))
+    d = fetch.fetch(args.url, _root(args), args.into)
+    note = {"新建": "（新建文件夹）",
+            "沿用": "（这篇以前抓过，沿用原文件夹" + ("，覆盖了 article.md）" if d["overwritten"] else "）"),
+            "指定": "（覆盖了之前抓取的版本）" if d["overwritten"] else ""}[d["how"]]
+    print(f"已保存：{d['path']}{note}")
     print(f"标题：{d['title']}")
     print(f"来源：{d['author'] or '（未知）'}  发布时间：{d['publish_time'] or '（未知）'}")
     print(f"图片：{d['images_ok']}/{d['images_unique']} 张已下载到 images/（正文共 {d['images_total']} 处）")
@@ -104,9 +142,18 @@ def cmd_config(args):
     if args.default:
         config.set_default(args.default)
         print(f"默认账号已改为 {args.default}")
+    if args.root:
+        root = config.set_articles_dir(args.root)
+        print(f"文章根目录已设为 {root}")
 
     st = config.status()
     print(f"\n配置文件：{st['path']}（{'存在' if st['exists'] else '不存在'}）")
+    if st["articles_dir"]:
+        print(f"文章根目录：{st['articles_dir']}（来源：{st['articles_dir_source']}）")
+        if args.root and st["articles_dir_source"] == "环境变量":
+            print(f"  注意：环境变量 {config.ENV_ROOT} 优先于配置文件，刚设置的不会生效")
+    else:
+        print("文章根目录：未配置（用的是当前目录下的 articles/，运行 config --root <路径> 设置）")
     if not st["accounts"]:
         print("还没有任何账号，运行 config --init 生成配置文件")
         return 0
@@ -142,14 +189,27 @@ def _existing(p) -> Path:
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog="wxflow.py", description="公众号文章：抓取 / 检查 / 预览 / 推送",
+    parser = argparse.ArgumentParser(prog="wxflow.py", description="公众号文章：新建 / 列出 / 抓取 / 检查 / 预览 / 推送",
                                      formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True, metavar="命令")
     account_help = "用哪个公众号账号（配置里的账号名），优先于文章头信息里的 account"
 
+    root_help = "文章根目录，优先于配置里的 articles_dir"
+
+    p = sub.add_parser("new", help="新建文章：<根目录>/<年-月-日-序号>/article.md")
+    p.add_argument("--title", help="标题，写进 article.md 的头信息（可以之后再写）")
+    p.add_argument("-o", "--root", help=root_help)
+    p.set_defaults(func=cmd_new)
+
+    p = sub.add_parser("list", help="列出所有文章：文件夹、标题、进度")
+    p.add_argument("-o", "--root", help=root_help)
+    p.set_defaults(func=cmd_list)
+
     p = sub.add_parser("fetch", help="抓取公众号文章")
     p.add_argument("url", help="公众号文章链接")
-    p.add_argument("-o", "--out", help="输出根目录（默认 ./articles）")
+    p.add_argument("--into", metavar="文件夹",
+                   help="抓到已有的文件夹里（文件夹名如 2026-11-12-01，或完整路径）；不写则自动新建")
+    p.add_argument("-o", "--root", "--out", dest="root", help=root_help)
     p.set_defaults(func=cmd_fetch)
 
     p = sub.add_parser("check", help="推送前检查（不联网）")
@@ -172,6 +232,7 @@ def main(argv=None):
     p.add_argument("--init", action="store_true", help="从模板生成配置文件（已存在则不动）")
     p.add_argument("--add", metavar="账号名", help="新增一个账号，之后自己用编辑器填写")
     p.add_argument("--default", metavar="账号名", help="设置默认账号")
+    p.add_argument("--root", metavar="路径", help="设置固定的文章根目录（存成绝对路径）")
     p.set_defaults(func=cmd_config)
 
     p = sub.add_parser("themes", help="列出排版主题")

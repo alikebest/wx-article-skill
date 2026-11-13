@@ -1,7 +1,9 @@
 """抓取公众号文章：正文转 Markdown，图片下载到本地。
 
-输出：<根目录>/<发布日期>_<标题>/article.md + images/
-同一篇重复抓取会落到同一个目录（覆盖 article.md，已下载的图片不重复下载）。
+输出：<根目录>/<年-月-日-序号>/article.md + images/，文件夹规则见 workspace.py：
+  指定 --into  抓到已有的文件夹里（比如先 new 了一篇），里面已有别的正文时拒绝覆盖
+  抓过同一篇    沿用原来的文件夹，覆盖 article.md，已下载的图片不重复下载
+  其他          按今天的日期新建文件夹
 
 front matter 只写来源信息，不写 author / cover：
   title          原标题
@@ -20,7 +22,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
 
-from . import frontmatter
+from . import frontmatter, workspace
 
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
@@ -35,12 +37,6 @@ def _deps():
     except ImportError:
         raise RuntimeError("抓取需要 beautifulsoup4 和 markdownify：pip install beautifulsoup4 markdownify")
     return BeautifulSoup, markdownify
-
-
-def safe_name(s: str, maxlen: int = 60) -> str:
-    """Windows 文件名不能含 \\/:*?"<>| 和控制字符，也不能以点或空格结尾。"""
-    s = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", s).strip()
-    return s[:maxlen].rstrip(". ")
 
 
 def _save_image(session, url: str, img_dir: Path):
@@ -93,7 +89,7 @@ def tidy(md: str) -> str:
     return md.strip() + "\n"
 
 
-def fetch(url: str, root: Path) -> dict:
+def fetch(url: str, root: Path, into=None) -> dict:
     BeautifulSoup, markdownify = _deps()
     try:
         r = requests.get(url, headers={"User-Agent": UA}, timeout=30)
@@ -121,9 +117,11 @@ def fetch(url: str, root: Path) -> dict:
         if img.get("data-src"):
             img["src"] = img["data-src"]
 
-    name = "_".join(filter(None, [publish_time[:10], title])) or hashlib.md5(url.encode()).hexdigest()[:8]
-    out_dir = Path(root) / safe_name(name)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    meta = {"title": title, "source_url": url, "source_author": author, "source_time": publish_time}
+    # 页面拿到了才决定文件夹：抓取失败不会留下空文件夹
+    out_dir, how = workspace.fetch_target(Path(root), url, meta, into)
+    md_path = out_dir / "article.md"
+    existed = workspace.has_body(md_path)
     ok, uniq, total = _download_images(body, out_dir)
 
     # 秀米等编辑器会把整段正文包进 <h1>，转 Markdown 时段落会被压成一行、图片只剩 alt
@@ -132,10 +130,7 @@ def fetch(url: str, root: Path) -> dict:
             h.name = "div"
     content = tidy(markdownify(str(body), heading_style="ATX"))
 
-    meta = {"title": title, "source_url": url, "source_author": author, "source_time": publish_time}
-    md_path = out_dir / "article.md"
-    existed = md_path.exists()
     md_path.write_text(frontmatter.dump({k: v for k, v in meta.items() if v}, content), encoding="utf-8")
-    return {"path": md_path, "overwritten": existed, "title": title, "author": author,
+    return {"path": md_path, "how": how, "overwritten": existed, "title": title, "author": author,
             "publish_time": publish_time, "images_ok": ok, "images_unique": uniq,
             "images_total": total, "chars": len(content)}

@@ -17,6 +17,9 @@
 没有明确指定账号时优先用它，适合 CI 这类自动化场景。
 
 选择账号的优先级：命令行 --account > 文章头信息 account > 环境变量账号 env > 配置里的 default。
+
+文章根目录（新建、抓取、列出文章都在这里）：顶层字段 articles_dir，用 config --root 设置；
+环境变量 WX_ARTICLE_DIR 优先于它。都没有时用当前目录下的 articles/。
 """
 
 import json
@@ -26,6 +29,8 @@ import shutil
 from pathlib import Path
 
 ENV_PATH = "WX_ARTICLE_CONFIG"
+ENV_ROOT = "WX_ARTICLE_DIR"
+ROOT_KEY = "articles_dir"
 ENV_FIELDS = {"appid": "WX_APPID", "secret": "WX_SECRET", "author": "WX_AUTHOR"}
 ENV_ACCOUNT = "env"
 FLAT_ACCOUNT = "main"
@@ -146,7 +151,34 @@ def status() -> dict:
         "secret": "已填写" if a["secret"] else "未填写",
         "author": a["author"],
     } for name, a in accs.items()]
-    return {"path": str(path), "exists": path.exists(), "default": default, "accounts": rows}
+    root, root_source = articles_dir()
+    return {"path": str(path), "exists": path.exists(), "default": default, "accounts": rows,
+            "articles_dir": str(root) if root else "", "articles_dir_source": root_source}
+
+
+def articles_dir():
+    """返回 (文章根目录, 来源)。环境变量 WX_ARTICLE_DIR > 配置文件 articles_dir；都没有返回 (None, "")。"""
+    for value, source in ((os.environ.get(ENV_ROOT), "环境变量"),
+                          (_read_file(config_path()).get(ROOT_KEY), "配置文件")):
+        if _filled(value):
+            p = Path(str(value).strip()).expanduser()
+            if not p.is_absolute():
+                raise ConfigError(f"{source}里的文章根目录要写绝对路径：{p}。"
+                                  "用 python wxflow.py config --root <路径> 重新设置")
+            return p, source
+    return None, ""
+
+
+def set_articles_dir(value: str) -> Path:
+    """设置文章根目录，存成绝对路径。配置文件还不存在时先从模板生成，免得之后 config --init 不生效。"""
+    root = Path(value).expanduser().resolve()
+    if root.exists() and not root.is_dir():
+        raise ConfigError(f"不是文件夹：{root}")
+    path, _ = init()
+    data = _read_file(path)
+    data[ROOT_KEY] = str(root)
+    _write(path, data)
+    return root
 
 
 def init():

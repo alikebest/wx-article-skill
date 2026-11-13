@@ -1,4 +1,5 @@
 {
+  "articles_dir": "这里填文章根目录的绝对路径（可留空，建议用 config --root 设置）",
   "default": "main",
   "accounts": {
     "main": {

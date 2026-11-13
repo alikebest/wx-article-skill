@@ -15,7 +15,9 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import requests  # noqa: E402
 
-from wxkit import check, config, frontmatter, preview, push, wechat  # noqa: E402
+from datetime import date  # noqa: E402
+
+from wxkit import check, config, frontmatter, preview, push, wechat, workspace  # noqa: E402
 from wxkit.naming import step_output  # noqa: E402
 from wxkit.themes import get_builder  # noqa: E402
 from wxkit.wechat import WeChat, WeChatError, truncate_units, wx_units  # noqa: E402
@@ -28,7 +30,7 @@ SECRET = "SECRET_should_never_leak_123"
 _TMP = Path(tempfile.mkdtemp(prefix="wxkit-test-"))
 CFG = _TMP / "config.json"
 os.environ["WX_ARTICLE_CONFIG"] = str(CFG)
-for _k in ("WX_APPID", "WX_SECRET", "WX_AUTHOR"):
+for _k in ("WX_APPID", "WX_SECRET", "WX_AUTHOR", "WX_ARTICLE_DIR"):
     os.environ.pop(_k, None)
 
 
@@ -524,6 +526,167 @@ def test_config_add_and_default():
         assert config.select() == "first", "第一个账号自动成为默认"
     finally:
         _set_config(None)
+
+
+def test_config_articles_dir():
+    _set_config(None)
+    tmp = Path(tempfile.mkdtemp(prefix="wxkit-root-"))
+    try:
+        assert config.articles_dir() == (None, "")
+        config.init()
+        assert config.articles_dir() == (None, ""), "模板里的占位文字视为未配置"
+
+        _set_config(TWO_ACCOUNTS)
+        root = config.set_articles_dir(str(tmp / "文章"))
+        assert root.is_absolute() and config.articles_dir() == (root, "配置文件")
+        data = json.loads(CFG.read_text(encoding="utf-8"))
+        assert data["accounts"] == TWO_ACCOUNTS["accounts"], "设置根目录不能动账号"
+        config.add_account("third")
+        assert config.articles_dir()[0] == root, "新增账号时根目录要保留"
+        st = json.dumps(config.status(), ensure_ascii=False)
+        assert str(root).replace("\\", "\\\\") in st and SECRET not in st
+
+        os.environ["WX_ARTICLE_DIR"] = str(tmp / "env")
+        try:
+            assert config.articles_dir() == (tmp / "env", "环境变量")
+            assert workspace.resolve_root(str(tmp / "cli"))[1] == "命令行"
+        finally:
+            os.environ.pop("WX_ARTICLE_DIR")
+
+        _set_config({"articles_dir": "relative/path"})
+        _expect_config_error(config.articles_dir, "绝对路径")
+        (tmp / "f.txt").write_text("x")
+        _expect_config_error(lambda: config.set_articles_dir(str(tmp / "f.txt")), "不是文件夹")
+
+        _set_config(None)
+        config.set_articles_dir(str(tmp))
+        assert config.load()["name"] == "main", "配置文件不存在时先从模板生成"
+    finally:
+        _set_config(None)
+
+
+# ---------------------------------------------------------------------------
+# 文章文件夹：新建、抓取落点、列出
+# ---------------------------------------------------------------------------
+
+DAY = date(2026, 11, 12)
+
+
+def test_workspace_numbering():
+    root = Path(tempfile.mkdtemp(prefix="wxkit-ws-"))
+    assert workspace.next_name(root / "不存在", DAY) == "2026-11-12-01"
+    for n in ("2026-11-12-01", "2026-11-12-03", "2026-11-11-07", "2026-11-12_旧标题", "笔记"):
+        (root / n).mkdir()
+    assert workspace.next_name(root, DAY) == "2026-11-12-04", "取最大序号加 1，不按个数数"
+    assert workspace.next_name(root, date(2026, 11, 11)) == "2026-11-11-08"
+    assert workspace.next_name(root, date(2026, 11, 13)) == "2026-11-13-01"
+    (root / "2026-11-12-04").write_text("同名文件")
+    assert workspace.make_dir(root, DAY).name == "2026-11-12-05", "同名文件也要跳过"
+    (root / "2026-11-12-99").mkdir()
+    assert workspace.next_name(root, DAY) == "2026-11-12-100"
+
+
+def test_workspace_new():
+    root = Path(tempfile.mkdtemp(prefix="wxkit-ws-")) / "根目录不存在也能建"
+    md = workspace.new_article(root, "我的标题", DAY)
+    assert md == root / "2026-11-12-01" / "article.md"
+    meta, body = frontmatter.split(md.read_text(encoding="utf-8"))
+    assert meta == {"title": "我的标题"} and not body.strip(), (meta, body)
+    md2 = workspace.new_article(root, day=DAY)
+    assert md2.parent.name == "2026-11-12-02"
+    assert frontmatter.split(md2.read_text(encoding="utf-8"))[0] == {}, "没给标题时是占位文字，视为未填"
+    assert not workspace.has_body(md2)
+
+
+def test_workspace_url_key():
+    k = workspace.url_key
+    assert k("https://mp.weixin.qq.com/s/AbC-1_x") == k("http://mp.weixin.qq.com/s/AbC-1_x?scene=1#rd")
+    long1 = "https://mp.weixin.qq.com/s?__biz=MzA&mid=22&idx=1&sn=abc&chksm=111&scene=21#wechat_redirect"
+    long2 = "https://mp.weixin.qq.com/s?__biz=MzA&mid=22&idx=1&sn=abc&chksm=999"
+    assert k(long1) == k(long2)
+    assert k(long1) != k(long1.replace("idx=1", "idx=2")), "同一次群发的第二篇是另一篇文章"
+    assert k("https://mp.weixin.qq.com/s/AAA") != k("https://mp.weixin.qq.com/s/BBB")
+
+
+def _fetched(root: Path, name: str, meta: dict, body="正文"):
+    d = root / name
+    d.mkdir(parents=True)
+    (d / "article.md").write_text(frontmatter.dump(meta, body), encoding="utf-8")
+    return d
+
+
+def test_fetch_target():
+    root = Path(tempfile.mkdtemp(prefix="wxkit-ws-"))
+    url = "https://mp.weixin.qq.com/s/SAME"
+    meta = {"title": "标题", "source_url": url, "source_author": "某号", "source_time": "2026-09-14 16:51"}
+
+    d, how = workspace.fetch_target(root, url, meta, day=DAY)
+    assert (d.name, how) == ("2026-11-12-01", "新建")
+
+    old = _fetched(root, "2026-09-14_标题", meta)  # 旧命名的抓取结果
+    assert workspace.fetch_target(root, url + "?scene=1", meta, day=DAY) == (old, "沿用")
+    long_url = "https://mp.weixin.qq.com/s?__biz=MzA&mid=1&idx=1&sn=x"
+    assert workspace.fetch_target(root, long_url, {**meta, "source_url": long_url}, day=DAY) == (old, "沿用"), \
+        "短链接和长链接：标题、作者、时间都相同算同一篇"
+    other = {**meta, "source_time": "2026-09-15 08:00"}
+    assert workspace.fetch_target(root, long_url, other, day=DAY)[1] == "新建", "发布时间不同不算同一篇"
+
+    # --into：空稿可以覆盖，已有别的正文拒绝，同一篇允许重抓
+    empty = workspace.new_article(root, day=DAY).parent
+    assert workspace.fetch_target(root, url, meta, into=empty.name) == (empty, "指定")
+    assert workspace.fetch_target(root, url, meta, into=str(empty)) == (empty, "指定"), "也接受完整路径"
+    draft = _fetched(root, "2026-11-12-09", {"title": "我写的"}, "我写了一半的稿子")
+    try:
+        workspace.fetch_target(root, url, meta, into=draft.name)
+        raise AssertionError("应该拒绝覆盖")
+    except RuntimeError as e:
+        assert "已经有正文" in str(e)
+    assert workspace.fetch_target(root, url, meta, into=old.name) == (old, "指定")
+    try:
+        workspace.fetch_target(root, url, meta, into="2026-01-01-01")
+        raise AssertionError("应该报文件夹不存在")
+    except RuntimeError as e:
+        assert "不存在" in str(e) and "new" in str(e)
+
+
+def test_list_entries():
+    root = Path(tempfile.mkdtemp(prefix="wxkit-ws-"))
+    assert workspace.entries(root / "不存在") == []
+    workspace.new_article(root, day=DAY)                                          # 01 空稿
+    _fetched(root, "2026-11-12-02", {"title": "我写的"}, "正文")                    # 02 写稿中
+    _fetched(root, "2026-11-12-03", {"title": "原标题", "source_url": "https://x/s/1"})
+    d4 = _fetched(root, "2026-11-12-04", {"title": "原标题", "source_url": "https://x/s/2"})
+    (d4 / "article.rewrite.md").write_text("---\ntitle: 重写后的标题\n---\n\n正文", encoding="utf-8")
+    (d4 / "article.layout.md").write_text("---\ncover: cover.jpg\n---\n\n# 排版后的标题\n\n正文", encoding="utf-8")
+    d5 = _fetched(root, "2026-11-12-05", {"title": "推过的"})
+    (d5 / "article.layout.md").write_text("---\ntitle: 推过的\n---\n\n正文", encoding="utf-8")
+    (d5 / "article.push.md").write_text(
+        "# 推送记录：推过的\n\n## 2026-11-12 10:00:00\n\n- 账号：main\n\n"
+        "## 2026-11-12 15:30:00\n\n- 账号：life\n", encoding="utf-8")
+    (root / "随手放的文件夹").mkdir()
+    (root / "v1.2.md").write_text("x")
+
+    rows = {e["name"]: e for e in workspace.entries(root)}
+    assert list(rows) == [f"2026-11-12-0{i}" for i in range(1, 6)], list(rows)
+    assert [rows[n]["stage"] for n in rows] == ["空稿", "写稿中", "已抓取", "已排版", "已推送"]
+    assert rows["2026-11-12-01"]["title"] == ""
+    assert rows["2026-11-12-03"]["title"] == "原标题"
+    assert rows["2026-11-12-04"]["title"] == "排版后的标题", "取最靠后一步的标题，头信息没有就取 # 标题"
+    assert rows["2026-11-12-05"]["pushes"] == 2 and rows["2026-11-12-05"]["last_account"] == "life"
+
+    line = workspace.format_entry(rows["2026-11-12-04"])
+    assert "缺封面" in line
+    (d4 / "cover.jpg").write_bytes(PNG_1PX)
+    assert "缺封面" not in workspace.format_entry(workspace.describe(d4))
+    assert "已推送 2 次（最近 11-12 15:30 · life）" in workspace.format_entry(rows["2026-11-12-05"])
+    assert "（无标题）" in workspace.format_entry(rows["2026-11-12-01"])
+
+    # 汉字占两格：不同长度的标题，后面的进度列要对齐
+    w = workspace._width
+    a = workspace.format_entry({**rows["2026-11-12-03"], "title": "短"})
+    b = workspace.format_entry({**rows["2026-11-12-03"], "title": "很长很长很长很长很长很长很长很长很长的标题 abc"})
+    assert w(a.split("已抓取")[0]) == w(b.split("已抓取")[0]), (a, b)
+    assert "..." in b
 
 
 if __name__ == "__main__":
