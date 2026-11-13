@@ -46,7 +46,7 @@ STYLE = {
     "quote_tip": CARD + f'box-shadow:4px 4px 0 {C["violet"]};',
     "quote_warn": CARD + f'box-shadow:4px 4px 0 {C["ink"]};',
     "p_in_quote": 'margin:0 0 8px 0;line-height:1.8;letter-spacing:.5px;text-align:justify;',
-    # 开头导语区：TL;DR 卡片，左上角一枚电紫小标签
+    # 开头导语区：导语卡片，左上角一枚电紫小标签「写在前面」
     "lead": CARD.replace("margin:22px 6px 22px 0", "margin:0 6px 26px 0") + f'box-shadow:4px 4px 0 {C["ink"]};',
     "lead_tag": f'display:inline-block;background:{C["violet"]};color:{C["ink"]};font-size:12px;font-weight:bold;line-height:1.6;padding:0 6px;border:1.5px solid {C["ink"]};margin-bottom:6px;font-family:Arial,sans-serif;',
     # 代码块：黑底，呼应“终端”的联想
@@ -241,7 +241,7 @@ class StyleInjector(HTMLParser):
                             f'<span style="{STYLE["h2_text"]}">')
             self.in_num_h2 = True
         elif tag == "section" and raw.get("data-lead"):
-            self.out.append(f'<span style="{STYLE["lead_tag"]}">TL;DR</span>')
+            self.out.append(f'<span style="{STYLE["lead_tag"]}">写在前面</span>')
         if tag not in render.VOID_TAGS:
             self.stack.append(tag)
 
