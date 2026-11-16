@@ -1,191 +1,228 @@
-# wx-article-skill：公众号文章工作流 skill
+# wx-article-skill
 
-给 Claude Code 用的 skill：抓取公众号文章 → 重写或美化 → 排版预览 → 推送到草稿箱。
-每一步都可以单独用，输入任意 Markdown，输出写在输入旁边，不改原文件。
+把公众号文章从素材整理、写稿润色、排版预览，一路处理到公众号草稿箱的 AI Skill。
 
-一篇文章一个文件夹（如 `2026-11-12-01`），这篇的所有产物和封面都在里面。
+既可以处理已有的 Markdown 稿件，也可以从公众号文章链接开始。你可以走完整套流程，也可以只用其中一步。
 
-| 操作 | 怎么说 | 产出 |
+## 能实现哪些功能
+
+| 功能 | 具体能做什么 | 主要产出 |
 |---|---|---|
-| 新建 | "新建一篇，标题是 xxx" | `<根目录>/<年-月-日-序号>/article.md` |
-| 列出 | "有哪些文章" | 每篇的文件夹、标题、进度 |
-| 抓取 | "抓取 https://mp.weixin.qq.com/s/xxx" | `<根目录>/<年-月-日-序号>/article.md` + `images/` |
-| 重写 | "把 article.md 重写一下"（别人的文章） | `article.facts.md` + `article.rewrite.md` |
-| 美化 | "帮我润色 我的稿子.md"（自己的稿子） | `我的稿子.polish.md` |
-| 排版 | "用粉色主题排版 xxx.md" | `xxx.layout.md` + `xxx.layout.html`（预览） |
-| 推送 | "把 xxx.layout.md 推送到草稿箱" | 公众号草稿 + `xxx.push.md`（推送记录） |
-| 模板列表 | "模板列表""有哪些主题" | 用浏览器打开模板列表页：每套主题的风格、特点、适合类型和预览 |
+| 新建文章 | 创建按日期和序号命名的文章文件夹，生成稿件模板 | `article.md` |
+| 查看文章 | 列出文章标题、所在文件夹及当前进度 | 空稿、已抓取、已重写、已美化、已排版、已推送等状态 |
+| 抓取公众号文章 | 从 `mp.weixin.qq.com` 链接提取正文、来源信息并下载正文图片 | `article.md`、`images/` |
+| 重写参考文章 | 先提取事实清单，再重新组织叙事和表达，最后润色、核对 | `article.facts.md`、`article.rewrite.md` |
+| 美化自己的稿子 | 保留观点、例子和个人口吻，调整结构、节奏和语言 | `article.polish.md` |
+| 排版与本地预览 | 按主题整理 Markdown，生成 HTML 预览页 | `article.layout.md`、`article.layout.html` |
+| 浏览排版主题 | 展示各主题的风格、适用内容和同一篇文章的排版效果 | 本地主题展示页 |
+| 推送公众号草稿箱 | 检查稿件、处理图片和封面，将文章推送到指定账号 | 公众号草稿、`article.push.md` 推送记录 |
+| 管理多个公众号 | 配置命名账号、设置默认账号，为单篇文章指定推送目标 | 账号配置与状态查询 |
 
-重写、美化、排版由 Claude 完成，用的是你当前对话里的模型，不需要额外的 AI 接口。
+提供 **11 套排版主题**，可按文章类型选择：
 
-## 安装
-
-仓库名为 `wx-article-skill`，技能名仍为 `wx-article`；下面的安装目录沿用技能名。
-
-```bash
-# 1. 放到个人 skill 目录（目录名就是 skill 名）
-git clone https://github.com/alikebest/wx-article-skill.git ~/.claude/skills/wx-article
-
-# 2. 安装依赖
-pip install -r ~/.claude/skills/wx-article/requirements.txt
-
-# 3. 生成配置文件，然后用编辑器打开它，自己填 appid / secret / author
-python ~/.claude/skills/wx-article/scripts/wxflow.py config --init
-
-# 4. 设置文章根目录：所有文章都放在这里
-python ~/.claude/skills/wx-article/scripts/wxflow.py config --root D:/公众号文章
-```
-
-Windows 下 `~` 是 `C:\Users\<你的用户名>`。重开一个 Claude Code 会话，输入 `/` 能看到 `wx-article` 就装好了。
-
-只想在某个项目里用，就放到 `<项目>/.claude/skills/wx-article/`。
-
-## 文章文件夹
-
-```
-D:/公众号文章/                  ← 根目录，config --root 设置
-├── 2026-11-12-01/              ← new 新建：自己写的稿子
-│   ├── article.md
-│   ├── article.polish.md
-│   ├── article.layout.md / .layout.html
-│   ├── article.push.md
-│   └── cover.jpg
-└── 2026-11-12-02/              ← fetch 抓取：别人的文章
-    ├── article.md
-    ├── images/
-    └── ...
-```
-
-- **命名**：`年-月-日-序号`，日期是建文件夹那天。序号取当天已有的最大值加 1，删掉中间某篇也不会撞号。
-- **根目录**：`-o` > 环境变量 `WX_ARTICLE_DIR` > 配置文件 `articles_dir` > 当前目录下的 `articles/`。没配置时每次都会提示；序号只在同一个根目录里不重复，所以建议固定下来。
-- **抓取**：同一篇以前抓过（链接相同，或者标题、作者、发布时间都相同）就沿用原文件夹。`--into <文件夹>` 可以抓到已有文件夹里，比如先 `new` 了一篇空的；文件夹里已经有别的正文时会拒绝覆盖。
-- **进度**：`list` 根据文件夹里已有哪些文件推断进度，不另记状态。
-- 以前按 `日期_标题` 命名的旧文件夹不用改，`list` 照样列出，重新抓取也会沿用。
-
-## 配置与密钥
-
-配置文件在 **`~/.config/wx-article/config.json`**，不在 skill 目录里：更新、重装 skill 不会冲掉配置，配置也不会跟着 skill 仓库被提交。
-
-```json
-{
-  "default": "main",
-  "accounts": {
-    "main": { "appid": "公众号后台 设置与开发 → 基本配置", "secret": "同上", "author": "默认作者名，可留空" },
-    "life": { "appid": "...", "secret": "...", "author": "..." }
-  }
-}
-```
-
-只有一个公众号时，也可以直接写 `{"appid": ..., "secret": ..., "author": ...}`，视为名叫 `main` 的账号。
-
-**多个公众号怎么切换：**
-
-- 新增账号：`python scripts/wxflow.py config --add life`，再用编辑器打开配置文件，在 `accounts.life` 里填写
-- 改默认账号：`config --default life`
-- 推送时指定：`push xxx.md --account life`，或者在文章头信息里写 `account: life`
-- 选择顺序：`--account` > 文章头信息 `account` > 环境变量账号 > 默认账号
-- 推送记录会写明推到了哪个账号；`thumb_media_id` 只在上传它的账号里有效，用错了 `check` 会报错
-
-环境变量：`WX_APPID` + `WX_SECRET`（可加 `WX_AUTHOR`）都设置时，构成一个名叫 `env` 的账号，没明确指定账号时优先用它，适合 CI；`WX_ARTICLE_CONFIG` 可以换配置文件的位置。
-
-安全上做了这些：
-
-- **自己填，别发给 Claude。** 对话内容会发给模型并存进本地会话记录。skill 里也规定了 Claude 只能用 `config` 命令查看"填没填"，不读配置文件。
-- 网络出错时报错信息不带请求地址（地址里有 secret 和 access_token），调试堆栈里也没有。
-- 推送前先做本地检查，检查不过不调用任何接口。
-- 还要去公众号后台 **基本配置 → IP 白名单** 加入本机公网 IP，否则报 40164。白名单也是一道保护：密钥万一泄露，别人不在白名单里也调不了接口。泄露后去后台重置 AppSecret。
-
-## 不通过 Claude，直接用命令行
-
-```bash
-python scripts/wxflow.py new [--title 标题]          # 新建文章文件夹
-python scripts/wxflow.py list                        # 列出所有文章和进度
-python scripts/wxflow.py fetch <链接> [--into 文件夹] # 抓取，不带 --into 时自动新建文件夹
-python scripts/wxflow.py check <文章.md>             # 推送前检查（不联网）
-python scripts/wxflow.py preview <文章.md> --open    # 本地预览（不联网）
-python scripts/wxflow.py push <文章.md>              # 推送到草稿箱（--account 指定账号）
-python scripts/wxflow.py config                      # 所有账号的配置状态（不显示密钥）
-python scripts/wxflow.py config --add <账号名>        # 新增账号
-python scripts/wxflow.py config --default <账号名>    # 设置默认账号
-python scripts/wxflow.py config --root <路径>         # 设置文章根目录
-python scripts/wxflow.py themes                      # 排版主题（纯文字）
-python scripts/wxflow.py gallery                     # 模板列表页（也可写成 模板列表），用浏览器打开
-```
-
-## front matter
-
-```yaml
----
-title: 标题（≤64 字，留空取正文第一个 # 标题）
-author: 作者（≤16 字，留空用配置里的 author）
-digest: 摘要（≤120 字，留空自动取正文开头）
-cover: cover.jpg            # 必填，路径相对本 md。排版时固定写成 cover.jpg，封面图就用这个名字放在 md 旁边
-thumb_media_id: MEDIA_ID    # 可选，复用已上传的封面，优先于 cover
-theme: lime                 # lime（默认）/ pink / neu / flat / minimal / bento / match / term / editorial / blueprint / pixel，见下方「排版主题」
-account: life               # 可选，推送到哪个公众号；不写用默认账号
----
-```
-
-## 排版主题
-
-在 front matter 里写 `theme: <主题>`，或者对 Claude 说"用夸张极简排版"。想先看每套主题长什么样，对 Claude 说"模板列表"，或者运行 `python scripts/wxflow.py gallery`。
-
-| 主题 | 风格 | 适合 |
+| 主题 | 风格 | 适合内容 |
 |---|---|---|
-| `lime`（默认） | 荧光柠绿 · 新粗野主义：黑白高对比、粗描边硬阴影 | AI 工具、独立开发、科技资讯 |
-| `pink` | 樱花粉 · 荧光笔：柔和手账风 | 数码好物、轻松话题、生活类 |
-| `neu` | 新拟态：同色浮雕，只靠阴影做凸起凹陷 | 硬件评测、参数对比（深色模式下浮雕感会消失） |
-| `flat` | 扁平化：纯色块，零阴影零渐变 | 日更资讯，深色模式最稳 |
-| `minimal` | 夸张极简：超大字号、大量留白、一个强调色 | 观点、深度解读、年度盘点 |
-| `bento` | 便当盒网格：开头自动生成"本期速览"格子盒 | 周报、发布会总结 |
-| `match` | 赛事战报：黑黄红高对比、斜切色块、计分板 | 电竞、体育、A vs B 对比 |
-| `term` | 终端：墨绿提示符、终端窗口代码块、日志式提示卡 | 配置教程、命令行工具 |
-| `editorial` | 杂志社论：衬线标题、首字下沉、拉页金句、三线表 | 深度长文、人物故事 |
-| `blueprint` | 工程图纸：浅蓝网格、标题栏小标题、尺寸线 | 硬件拆解、原理图解 |
-| `pixel` | 像素 8-bit：像素边框、像素爱心、血条分割线 | 游戏内容、轻松八卦 |
+| `lime`（默认） | 荧光柠绿、粗描边、硬阴影 | AI 工具、科技资讯、独立开发 |
+| `pink` | 樱花粉、荧光笔、手账感 | 数码好物、生活、轻松话题 |
+| `neu` | 同色浮雕、新拟态 | 硬件评测、参数对比 |
+| `flat` | 扁平纯色块 | 日更资讯、简洁图文 |
+| `minimal` | 超大字号、大量留白 | 观点、深度解读、年度盘点 |
+| `bento` | 便当盒网格、速览卡片 | 周报、发布会总结 |
+| `match` | 黑黄对比、计分板 | 电竞、体育、对比评测 |
+| `term` | 墨绿终端、代码窗口 | 配置教程、命令行工具 |
+| `editorial` | 衬线标题、首字下沉、杂志感 | 长文、人物故事、社论 |
+| `blueprint` | 浅蓝网格、工程图纸 | 硬件拆解、原理说明 |
+| `pixel` | 像素边框、爱心、血条 | 游戏、轻松内容 |
 
-`lime`、`pink` 以外的主题额外认一种**数据列表**：无序列表 1~3 项，每项都是 `**数值** 简短说明`，会排成各主题的数据组件（数据圆盘、数据磁贴、超大数字、便当数据格、计分板、参数格等）：
+## 有哪些优势
 
-```markdown
-- **35dB** 降噪深度
-- **30h** 综合续航
-```
+- **按需使用，随时接着做。** 稿件处理步骤接受 Markdown，不必先抓取才能排版，也不必走完整个流程。已有稿件可以直接润色或预览。
+- **原稿与各阶段产物分开保存。** 重写、美化和排版生成带步骤后缀的新文件，不覆盖输入稿件；同一篇文章的稿件、图片、封面和推送记录集中在一个文件夹里。
+- **重写和润色有不同策略。** 参考文章先拆解事实再重新成文；自己的稿件侧重保留内容和口吻，避免把两种任务混在一起。
+- **写作与执行各有分工。** 当前 harness 的模型负责文字编辑，Python 脚本负责抓取、检查、渲染和推送，技能本身无需额外配置 AI 接口。
+- **先预览、检查，再推送。** 可以在本地查看排版；推送前自动检查，有错误就停止。推送只在明确要求时执行，成功后留下记录。
+- **可跨 harness 复用。** 工作流以 `SKILL.md`、参考文档和 Python 脚本组织，可接入具备相应能力的 Agent Skills 宿主，Claude Code 是其中一种使用方式。
 
-想保持普通列表，在加粗后面加冒号（`- **30h**：续航`）。各主题对每种写法的具体效果见 [references/layout.md](references/layout.md)。
+## 怎么使用
 
-## 注意事项
+### 1. 准备运行环境
 
-- **个人主体订阅号只能推到草稿箱**（2025 年 7 月起发布接口被回收），发表要去后台手动点。
-- 接口有日配额，`draft` 相关接口一天几十次后报 45009，第二天再试。
-- 每推送一次会把封面存成一张新的永久素材。想复用，把推送记录里的 `thumb_media_id` 写进 front matter。
-- 正文图片必须是本地图，外链图发出去显示不出来。
-- 正文里有 SVG 图片时需要额外 `pip install playwright`（用本机 Edge/Chrome 渲染）。
-- 重写别人的文章发布前，请确认有转载或改写的授权。来源链接会保留在 front matter 的 `source_url` 里。
+要完成整套工作流，所用 harness（智能体运行环境）需要能读取 `SKILL.md` 及引用文件、读写稿件，并执行 Python 脚本。抓取和推送需要联网；本地排版预览不需要公众号密钥。
 
-## 目录结构
-
-```
-SKILL.md               skill 入口：给 Claude 的总说明
-references/            各步骤的详细规范，Claude 用到时才读
-  rewrite.md           重写：事实清单 → 子代理成文 → 去 AI 味
-  polish.md            美化：保留原稿内容，只调结构和节奏
-  layout.md            排版：front matter、主题写法、允许的格式调整
-  titles.md            标题与摘要规则
-scripts/wxflow.py      统一入口
-scripts/wxkit/         实现：抓取、主题、检查、预览、推送、配置、模板列表
-tests/test_wxkit.py    本地回归测试（不调用接口）：python tests/test_wxkit.py
-```
-
-## 开发与打包
+在实际执行脚本的本机、容器或远程环境中安装：
 
 ```bash
 git clone https://github.com/alikebest/wx-article-skill.git
 cd wx-article-skill
 pip install -r requirements.txt
+```
+
+建议设置固定的文章根目录，将下面的示例路径换成自己选定的位置：
+
+```bash
+python scripts/wxflow.py config --root D:/公众号文章
+```
+
+未设置时，默认使用当前工作目录下的 `articles/`。`new`、`list`、`fetch` 可用 `-o <路径>` 临时指定根目录；根目录优先级为 `-o` > `WX_ARTICLE_DIR` 环境变量 > 配置文件 > 默认目录。
+
+### 2. 将 Skill 接入 harness
+
+仓库及本地开发目录名为 `wx-article-skill`，技能名为 `wx-article`。按宿主支持的方式选择一种接入：
+
+| 接入方式 | 操作 |
+|---|---|
+| 技能目录或自定义路径 | 将完整目录安装或注册到宿主支持的位置，保留文件的相对结构；若要求目录名与技能名一致，安装目录使用 `wx-article` |
+| ZIP 导入 | 运行 `python tools/pack_zip.py`，按平台要求导入 `dist/wx-article.zip` 或 `dist/wx-article-folder.zip` |
+| 显式读取入口文件 | 如果宿主不自动发现技能，但有文件和命令工具，直接让智能体读取项目的 `SKILL.md`，再执行任务 |
+
+显式指定入口的示例：
+
+```text
+请先读取 <项目绝对路径>/SKILL.md，按其中的公众号文章工作流处理这份稿子：<稿件绝对路径>。
+```
+
+不同 harness 的技能目录、导入规则和执行权限不同，需按各自文档配置，尚未逐一验证所有产品。ZIP 打包会移除 `argument-hint` 扩展字段，其余元信息仍需符合目标平台规则。参见 [Agent Skills 概述](https://agentskills.io/home)和[宿主集成说明](https://agentskills.io/client-implementation/adding-skills-support)。
+
+技能正文中的 Claude 可对应为当前 AI 智能体，Agent / Task 对应宿主的子代理工具。子代理是可选能力：没有时，重写流程可以在主对话中依次完成，原文表达与新稿的上下文隔离会弱一些。
+
+**Claude Code 安装示例**：按其[技能文档](https://code.claude.com/docs/en/skills)，可安装到用户技能目录：
+
+```bash
+git clone https://github.com/alikebest/wx-article-skill.git ~/.claude/skills/wx-article
+pip install -r ~/.claude/skills/wx-article/requirements.txt
+```
+
+项目内使用时可放到 `<项目>/.claude/skills/wx-article/`，重新加载后通过 `/wx-article` 调用。其他 harness 使用各自的入口。Windows 命令行若未展开 `~`，请改用用户目录的完整路径。
+
+### 3. 用自然语言处理文章
+
+加载技能后，直接说明要处理的稿件和目标即可。
+
+**从自己的稿子开始：**
+
+```text
+帮我润色 D:/公众号文章/我的稿子.md，保留我的观点、例子和口吻。
+把生成的润色稿用 editorial 主题排版，并打开预览。
+```
+
+**从参考文章开始：**
+
+```text
+抓取这篇文章：https://mp.weixin.qq.com/s/文章标识
+根据抓取结果提取事实，重新组织成一篇文章，再用 lime 主题排版预览。
+```
+
+**其他常用指令：**
+
+| 目标 | 示例 |
+|---|---|
+| 开始新稿 | 新建一篇文章，标题是「我的工具周报」 |
+| 查找已有文章 | 列一下文章，看看哪些已经排版 |
+| 选择主题 | 打开模板列表，看看各个主题的效果 |
+| 更换排版 | 把这份稿子改成 pink 主题，再生成预览 |
+| 推送草稿 | 检查这份排版稿，通过后推送到 life 号的草稿箱 |
+
+重写参考文章前，请确认有相应的转载或改写授权。正文中的图片应使用本地文件；封面由用户准备，统一命名为 `cover.jpg`，放在稿件旁边。缺封面时可以先完成排版，推送前再补齐。
+
+### 4. 配置公众号并推送
+
+只做写稿和本地预览时，可以先跳过账号配置。需要推送时，生成配置模板：
+
+```bash
+python scripts/wxflow.py config --init
+```
+
+用编辑器打开 `~/.config/wx-article/config.json`，自行填写 `appid`、`secret` 和默认作者，并在公众号后台将执行环境的公网 IP 加入白名单。配置也可通过 `WX_ARTICLE_CONFIG` 指向其他位置。
+
+**密钥只在本地填写，不要发到对话里。** 让智能体运行 `config` 查看配置状态即可，不要让它读取或打印配置文件。
+
+多账号的常用操作：
+
+```bash
+# 添加命名账号，再自行打开配置文件填写
+python scripts/wxflow.py config --add life
+
+# 设置默认账号、查看配置状态
+python scripts/wxflow.py config --default life
+python scripts/wxflow.py config
+
+# 检查并推送一份稿件
+python scripts/wxflow.py check D:/公众号文章/我的稿子.layout.md --account life
+python scripts/wxflow.py push D:/公众号文章/我的稿子.layout.md --account life
+```
+
+账号选择优先级为：命令行 `--account` > 稿件头信息 `account` > 环境变量账号 `env` > 默认账号。也可以通过 `WX_APPID`、`WX_SECRET`、`WX_AUTHOR` 提供环境变量账号。
+
+推送后，前往公众号后台草稿箱检查效果，再手动发表。实际可用接口和配额以公众号账号权限及接口返回为准。推送记录中的 `thumb_media_id` 可用于复用封面，且仅对上传它的账号有效。
+
+### 5. 管理稿件与排版信息
+
+一篇文章一个文件夹，由新建或抓取命令生成，名称为 `年-月-日-序号`：
+
+```text
+D:/公众号文章/
+└── 2026-11-16-01/
+    ├── article.md             原稿或抓取结果
+    ├── article.facts.md       重写使用的事实清单
+    ├── article.rewrite.md     重写稿
+    ├── article.polish.md      润色稿
+    ├── article.layout.md      排版稿
+    ├── article.layout.html    本地预览
+    ├── article.push.md        推送记录
+    ├── cover.jpg              用户准备的封面
+    └── images/                正文图片
+```
+
+以上文件按实际使用的步骤生成。已有 Markdown 可以直接在原位置处理，输出写在输入旁边，无需先搬进文章根目录。步骤后缀会统一替换，例如 `article.rewrite.md` 排版后生成 `article.layout.md`。
+
+稿件通过 YAML 头信息设置标题、主题和推送账号，例如：
+
+```yaml
+---
+title: 我的工具周报
+author: 小明
+digest: 本周值得关注的工具与实践。
+cover: cover.jpg
+theme: lime
+account: life
+---
+
+这里开始写正文。
+```
+
+`author` 留空时使用账号默认作者，`digest` 留空时从正文开头提取，`account` 省略时按账号选择规则处理。已有封面素材可用 `thumb_media_id` 复用，其优先级高于 `cover`。
+
+更多排版规则见 [references/layout.md](references/layout.md)，标题规则见 [references/titles.md](references/titles.md)。正文含 SVG 图片时，需要额外安装 `playwright`，脚本使用本机 Edge / Chrome 渲染。
+
+### 6. 直接使用命令行
+
+脚本命令可独立运行。重写、美化及排版中的内容整理由智能体或人工完成，脚本负责抓取、渲染、检查和推送等操作。
+
+| 命令 | 用途 |
+|---|---|
+| `python scripts/wxflow.py new --title "文章标题"` | 新建文章 |
+| `python scripts/wxflow.py list` | 列出文章及进度 |
+| `python scripts/wxflow.py fetch <链接>` | 抓取公众号文章；可加 `--into <文件夹>` 使用指定文件夹 |
+| `python scripts/wxflow.py themes` | 查看主题名称 |
+| `python scripts/wxflow.py gallery` | 打开主题展示页；加 `--no-open` 仅生成页面 |
+| `python scripts/wxflow.py preview <稿件.md> --open` | 将已有 Markdown 渲染为 HTML 并打开预览 |
+| `python scripts/wxflow.py check <稿件.md>` | 本地推送检查，不调用公众号接口 |
+| `python scripts/wxflow.py push <稿件.md>` | 推送至公众号草稿箱 |
+
+以上 `<链接>`、`<稿件.md>` 等为占位符，运行时替换为实际值。`check`、`preview`、`push` 均可加 `--account <账号名>`。
+
+### 7. 测试与打包
+
+在仓库目录中运行：
+
+```bash
 python tests/test_wxkit.py
 python tools/pack_zip.py
 ```
 
-打包脚本会先运行测试，再生成并自检 `dist/wx-article.zip` 和 `dist/wx-article-folder.zip`。
-发布包内使用 `scripts/wxkit.zip` 加载模块；本地源码目录仍可直接运行。
-`dist/`、文章和本地配置不会提交到仓库。
+打包脚本会先运行测试，再生成并解压自检两种发布包：
+
+- `dist/wx-article.zip`：`SKILL.md` 在 ZIP 根目录。
+- `dist/wx-article-folder.zip`：外层包含 `wx-article/` 文件夹。
+
+发布包将模块收在 `scripts/wxkit.zip` 中；本地开发使用 `scripts/wxkit/` 源码目录。文章、个人配置、缓存和 `dist/` 不会提交到仓库。
