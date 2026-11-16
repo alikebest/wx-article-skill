@@ -1,6 +1,11 @@
 ---
 name: wx-article
-description: 微信公众号文章工作流：新建文章、列出文章、抓取公众号文章（mp.weixin.qq.com 链接）、重写别人的文章、美化润色自己写的稿子、按主题排版并本地预览、推送到公众号草稿箱。用户提到公众号、草稿箱、公众号排版，要新写一篇公众号文章，要把文章改写/润色后发公众号，或者给出 mp.weixin.qq.com 链接时使用。每一步都可以单独用，输入任意 Markdown 文件。
+version: "1.0.1"
+display_name: "微信公众号快捷生成大师"
+display_name_en: "WeChat Article production workflow"
+description: "微信公众号文章工作流：新建文章、列出文章、抓取公众号文章（mp.weixin.qq.com 链接）、重写别人的文章、美化润色自己写的稿子、按主题排版并本地预览、推送到公众号草稿箱。用户提到公众号、草稿箱、公众号排版，要新写一篇公众号文章，要把文章改写/润色后发公众号，或者给出 mp.weixin.qq.com 链接时使用。每一步都可以单独用，输入任意 Markdown 文件。"
+description_zh: "微信公众号文章全流程工作流：新建文章、抓取、重写、美化润色、排版预览（11 套主题）、推送到草稿箱，每一步可单独使用，输入任意 Markdown 文件。"
+description_en: "Full WeChat Official Account article workflow: create, fetch, rewrite, polish, layout (11 themes) and push to draft box. Each step works independently with any Markdown file."
 argument-hint: "[新建|列出|抓取|重写|美化|排版|推送|模板列表] <链接或 md 路径>"
 ---
 

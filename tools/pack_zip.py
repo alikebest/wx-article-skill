@@ -18,6 +18,7 @@ SKILL.md 里只有 Claude Code 认识的头信息字段（argument-hint）会在
 """
 
 import argparse
+import io
 import os
 import re
 import subprocess
@@ -34,8 +35,12 @@ CLAUDE_ONLY_FIELDS = ("argument-hint",)
 
 # 自检：在解压出来的包里导入全部模块（不联网、不读配置）
 IMPORT_ALL = r"""
-import importlib, pkgutil, sys
-sys.path.insert(0, "scripts")
+import importlib, pkgutil, sys, os
+here = os.path.join(os.getcwd(), "scripts")
+sys.path.insert(0, here)
+zip_path = os.path.join(here, "wxkit.zip")
+if os.path.isfile(zip_path):
+    sys.path.insert(0, zip_path)
 import wxkit, wxkit.themes
 for pkg in (wxkit, wxkit.themes):
     for m in pkgutil.iter_modules(pkg.__path__, pkg.__name__ + "."):
@@ -45,16 +50,26 @@ print("ok")
 
 
 def collect():
-    files = [ROOT / f for f in INCLUDE_FILES]
-    for d in INCLUDE_DIRS:
-        files += [p for p in sorted((ROOT / d).rglob("*"))
-                  if p.is_file() and "__pycache__" not in p.parts and p.suffix != ".pyc"]
-    for p in files:
+    outer_files = [ROOT / f for f in INCLUDE_FILES]
+    # references 目录下的直接/间接文件
+    outer_files += [p for p in sorted((ROOT / "references").rglob("*"))
+                    if p.is_file() and "__pycache__" not in p.parts]
+    # scripts 下除 wxkit 目录以外的文件（如 wxflow.py）
+    for p in sorted((ROOT / "scripts").iterdir()):
+        if p.is_file() and p.name != "wxkit.zip" and p.suffix != ".pyc":
+            outer_files.append(p)
+
+    # scripts/wxkit 内部所有用于构建 wxkit.zip 的 Python 文件
+    wxkit_dir = ROOT / "scripts" / "wxkit"
+    wxkit_files = [p for p in sorted(wxkit_dir.rglob("*.py"))
+                   if "__pycache__" not in p.parts]
+
+    for p in outer_files + wxkit_files:
         if not p.exists():
             sys.exit(f"缺少文件：{p}")
         if p.name == "config.json":
             sys.exit(f"发现 config.json，可能含密钥，已停止：{p}")
-    return files
+    return outer_files, wxkit_files
 
 
 def portable_skill_md(text: str) -> str:
@@ -92,22 +107,37 @@ def git_state(files):
     return commit, dirty
 
 
-def write_zip(out: Path, files, prefix: str, comment: str):
+def build_wxkit_zip_bytes(wxkit_files) -> bytes:
+    """把 scripts/wxkit 内部所有 Python 文件打包为内存中的 zip 字节流。"""
+    buf = io.BytesIO()
+    wxkit_dir = ROOT / "scripts" / "wxkit"
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for p in wxkit_files:
+            arc = "wxkit/" + p.relative_to(wxkit_dir).as_posix()
+            z.write(p, arc)
+    return buf.getvalue()
+
+
+def write_zip(out: Path, outer_files, wxkit_zip_bytes: bytes, prefix: str, comment: str):
     tmp = out.with_name(out.name + ".tmp")
     with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
         z.comment = comment.encode("utf-8")
-        for p in files:
+        for p in outer_files:
             arc = prefix + p.relative_to(ROOT).as_posix()
             if p.name == "SKILL.md" and p.parent == ROOT:
                 z.writestr(arc, portable_skill_md(p.read_text(encoding="utf-8")))
             else:
                 z.write(p, arc)
+        # 将 wxkit.zip 单文件写入 scripts/ 目录下（消除子目录嵌套，严格满足两级目录限制）
+        z.writestr(prefix + "scripts/wxkit.zip", wxkit_zip_bytes)
     return tmp
 
 
-def run(cmd, cwd):
+def run(cmd, cwd, env_extra=None):
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}  # 免得导入到仓库里的代码
     env["PYTHONIOENCODING"] = "utf-8"
+    if env_extra:
+        env.update(env_extra)
     return subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True,
                           encoding="utf-8", errors="replace")
 
@@ -123,13 +153,21 @@ def smoke_test(zip_path: Path, prefix: str, n_files: int):
         skill = (pkg / "SKILL.md").read_text(encoding="utf-8")
         if any(re.search(rf"^{f}:", skill, re.M) for f in CLAUDE_ONLY_FIELDS):
             return "包里的 SKILL.md 还带着只有 Claude Code 认识的头信息字段"
+        try:
+            import yaml
+            parts = skill.split("---")
+            if len(parts) >= 3:
+                yaml.safe_load(parts[1])
+        except Exception as e:
+            return f"包里的 SKILL.md frontmatter YAML 格式不合法：{e}"
         checks = [
-            ("导入全部模块", [sys.executable, "-c", IMPORT_ALL]),
-            ("themes", [sys.executable, "scripts/wxflow.py", "themes"]),
-            ("gallery", [sys.executable, "scripts/wxflow.py", "gallery", "--no-open", "-o", str(Path(d) / "gallery.html")]),
+            ("导入全部模块", [sys.executable, "-c", IMPORT_ALL], None),
+            ("themes", [sys.executable, "scripts/wxflow.py", "themes"], None),
+            ("gallery", [sys.executable, "scripts/wxflow.py", "gallery", "--no-open", "-o", str(Path(d) / "gallery.html")], None),
+            ("config --init", [sys.executable, "scripts/wxflow.py", "config", "--init"], {"WX_ARTICLE_CONFIG": str(Path(d) / "test_config.json")}),
         ]
-        for label, cmd in checks:
-            r = run(cmd, pkg)
+        for label, cmd, extra_env in checks:
+            r = run(cmd, pkg, env_extra=extra_env)
             if r.returncode != 0 or "[错误]" in r.stdout:
                 return f"{label} 失败：\n{(r.stdout + r.stderr).strip()}"
     return ""
@@ -154,20 +192,25 @@ def main():
             sys.exit(f"\n测试没通过，没有打包：{last}")
         print(f"  {last}")
 
-    files = collect()
-    commit, dirty = git_state(files)
+    outer_files, wxkit_files = collect()
+    all_files = outer_files + wxkit_files
+    commit, dirty = git_state(all_files)
     comment = f"{NAME} {commit or '（不在 git 仓库里）'}" + ("，含未提交的改动" if dirty else "")
+
+    print(f"压缩 wxkit 依赖库（{len(wxkit_files)} 个模块文件 -> scripts/wxkit.zip）...")
+    wxkit_zip_bytes = build_wxkit_zip_bytes(wxkit_files)
 
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
     outs = [(dist / f"{NAME}.zip", ""), (dist / f"{NAME}-folder.zip", f"{NAME}/")]
     tmps = []
+    total_packed_count = len(outer_files) + 1  # outer_files + scripts/wxkit.zip
     try:
         for out, prefix in outs:
-            tmp = write_zip(out, files, prefix, comment)
+            tmp = write_zip(out, outer_files, wxkit_zip_bytes, prefix, comment)
             tmps.append(tmp)
             print(f"自检 {out.name} ...")
-            err = smoke_test(tmp, prefix, len(files))
+            err = smoke_test(tmp, prefix, total_packed_count)
             if err:
                 sys.exit(f"{out.name} 自检失败，dist/ 里的旧包没动：\n{err}")
         for (out, _), tmp in zip(outs, tmps):
@@ -176,9 +219,11 @@ def main():
         for tmp in tmps:
             tmp.unlink(missing_ok=True)
 
-    print(f"\n打包了 {len(files)} 个文件：")
-    for p in files:
+    print(f"\n成功打包到 {dist}（两级目录合规结构）：")
+    for p in outer_files:
         print(f"  {p.relative_to(ROOT).as_posix()}")
+    print(f"  scripts/wxkit.zip (内含 {len(wxkit_files)} 个 Python 模块)")
+
     for out, prefix in outs:
         print(f"\n{out}（{out.stat().st_size / 1024:.1f} KB）"
               + ("：SKILL.md 在根目录" if not prefix else f"：外面一层 {prefix}"))

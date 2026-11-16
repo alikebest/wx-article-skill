@@ -37,7 +37,23 @@ FLAT_ACCOUNT = "main"
 FIELDS = ("appid", "secret", "author")
 PLACEHOLDER = "这里填"
 NAME_RE = re.compile(r"^[A-Za-z0-9_\-一-鿿]{1,32}$")
-EXAMPLE = Path(__file__).resolve().parents[2] / "config.example.json"
+def _find_example() -> Path:
+    p = Path(__file__).resolve()
+    for parent in [p, *p.parents]:
+        cand = parent / "config.example.json"
+        if cand.is_file():
+            return cand
+    file_str = str(p)
+    if ".zip" in file_str:
+        zip_str = file_str[:file_str.index(".zip") + 4]
+        zip_parent = Path(zip_str).parent
+        for cand in [zip_parent.parent / "config.example.json", zip_parent / "config.example.json"]:
+            if cand.is_file():
+                return cand
+    return Path(__file__).resolve().parents[2] / "config.example.json"
+
+
+EXAMPLE = _find_example()
 NEW_ACCOUNT_TEMPLATE = {
     "appid": "这里填AppID（公众号后台 设置与开发 → 基本配置）",
     "secret": "这里填AppSecret",

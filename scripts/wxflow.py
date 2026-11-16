@@ -33,6 +33,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+# 兼容 Skill 包两级目录限制：若同级存在 wxkit.zip（打包产物），优先加入 sys.path
+_wxkit_zip = Path(__file__).resolve().parent / "wxkit.zip"
+if _wxkit_zip.is_file() and str(_wxkit_zip) not in sys.path:
+    sys.path.insert(0, str(_wxkit_zip))
+
 # 控制台编码不是 UTF-8 时（如部分 Windows 终端），无法编码的字符用 ? 代替，不至于报错退出
 for stream in (sys.stdout, sys.stderr):
     if hasattr(stream, "reconfigure"):
