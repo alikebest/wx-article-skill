@@ -1,6 +1,7 @@
 ---
 name: wx-article
 version: "1.0.1"
+license: PolyForm-Noncommercial-1.0.0
 display_name: "微信公众号快捷生成大师"
 display_name_en: "WeChat Article production workflow"
 description: "微信公众号文章工作流：新建文章、列出文章、抓取公众号文章（mp.weixin.qq.com 链接）、重写别人的文章、美化润色自己写的稿子、按主题排版并本地预览、推送到公众号草稿箱。用户提到公众号、草稿箱、公众号排版，要新写一篇公众号文章，要把文章改写/润色后发公众号，或者给出 mp.weixin.qq.com 链接时使用。每一步都可以单独用，输入任意 Markdown 文件。"

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """把 skill 打成 zip，用于上传到 WorkBuddy 等平台。运行：python tools/pack_zip.py [--skip-tests]
 
-只打包运行需要的文件：SKILL.md、references/、scripts/、requirements.txt、config.example.json、README.md。
+打包运行与分发需要的文件：LICENSE、SKILL.md、references/、scripts/、requirements.txt、config.example.json、README.md。
 不打包：articles/（你的文章）、.claude/（本机设置）、tests/、tools/、dist/、缓存，以及任何 config.json。
 
 输出两种结构，平台要求不明确时都可以试：
@@ -29,7 +29,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 NAME = "wx-article"
-INCLUDE_FILES = ["SKILL.md", "README.md", "requirements.txt", "config.example.json"]
+INCLUDE_FILES = ["SKILL.md", "README.md", "LICENSE", "requirements.txt", "config.example.json"]
 INCLUDE_DIRS = ["references", "scripts"]
 CLAUDE_ONLY_FIELDS = ("argument-hint",)
 

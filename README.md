@@ -4,6 +4,8 @@
 
 既可以处理已有的 Markdown 稿件，也可以从公众号文章链接开始。你可以走完整套流程，也可以只用其中一步。
 
+**仅限非商业使用，禁止商用。** 本项目采用 [PolyForm Noncommercial License 1.0.0](LICENSE)。
+
 ## 能实现哪些功能
 
 | 功能 | 具体能做什么 | 主要产出 |
@@ -42,6 +44,17 @@
 - **写作与执行各有分工。** 当前 harness 的模型负责文字编辑，Python 脚本负责抓取、检查、渲染和推送，技能本身无需额外配置 AI 接口。
 - **先预览、检查，再推送。** 可以在本地查看排版；推送前自动检查，有错误就停止。推送只在明确要求时执行，成功后留下记录。
 - **可跨 harness 复用。** 工作流以 `SKILL.md`、参考文档和 Python 脚本组织，可接入具备相应能力的 Agent Skills 宿主，Claude Code 是其中一种使用方式。
+
+## 使用许可
+
+本项目采用 **PolyForm Noncommercial License 1.0.0**，SPDX 标识为 `PolyForm-Noncommercial-1.0.0`。
+
+- 允许在许可证规定的范围内进行非商业使用、修改和再分发，例如个人学习、研究实验和非商业兴趣项目。
+- **本仓库不授予商业使用权。** 不得以商业目的使用本项目，例如售卖本项目、集成到收费产品，或用它提供收费代写、排版、代运营等服务。
+- 再分发时须保留许可证或其链接，以及本项目提供的 `Required Notice:` 声明。
+- 许可证对特定非商业机构等情形另有明确规定，具体权利、例外和义务以 [LICENSE](LICENSE) 原文为准。第三方依赖仍遵循各自的许可证。
+
+Required Notice: Copyright (c) 2026 alikebest (https://github.com/alikebest/wx-article-skill)
 
 ## 怎么使用
 
