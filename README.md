@@ -1,4 +1,4 @@
-# wx-article：公众号文章工作流 skill
+# wx-article-skill：公众号文章工作流 skill
 
 给 Claude Code 用的 skill：抓取公众号文章 → 重写或美化 → 排版预览 → 推送到草稿箱。
 每一步都可以单独用，输入任意 Markdown，输出写在输入旁边，不改原文件。
@@ -20,9 +20,11 @@
 
 ## 安装
 
+仓库名为 `wx-article-skill`，技能名仍为 `wx-article`；下面的安装目录沿用技能名。
+
 ```bash
 # 1. 放到个人 skill 目录（目录名就是 skill 名）
-git clone <本仓库地址> ~/.claude/skills/wx-article
+git clone https://github.com/alikebest/wx-article-skill.git ~/.claude/skills/wx-article
 
 # 2. 安装依赖
 pip install -r ~/.claude/skills/wx-article/requirements.txt
@@ -173,3 +175,17 @@ scripts/wxflow.py      统一入口
 scripts/wxkit/         实现：抓取、主题、检查、预览、推送、配置、模板列表
 tests/test_wxkit.py    本地回归测试（不调用接口）：python tests/test_wxkit.py
 ```
+
+## 开发与打包
+
+```bash
+git clone https://github.com/alikebest/wx-article-skill.git
+cd wx-article-skill
+pip install -r requirements.txt
+python tests/test_wxkit.py
+python tools/pack_zip.py
+```
+
+打包脚本会先运行测试，再生成并自检 `dist/wx-article.zip` 和 `dist/wx-article-folder.zip`。
+发布包内使用 `scripts/wxkit.zip` 加载模块；本地源码目录仍可直接运行。
+`dist/`、文章和本地配置不会提交到仓库。
