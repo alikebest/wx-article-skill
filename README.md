@@ -133,6 +133,7 @@ pip install -r ~/.claude/skills/wx-article/requirements.txt
 | 查找已有文章 | 列一下文章，看看哪些已经排版 |
 | 选择主题 | 打开模板列表，看看各个主题的效果 |
 | 更换排版 | 把这份稿子改成 pink 主题，再生成预览 |
+| 导出头条 | 把这份排版稿导出为今日头条排版并打开预览 |
 | 推送草稿 | 检查这份排版稿，通过后推送到 life 号的草稿箱 |
 
 重写参考文章前，请确认有相应的转载或改写授权。正文中的图片应使用本地文件；封面由用户准备，统一命名为 `cover.jpg`，放在稿件旁边。缺封面时可以先完成排版，推送前再补齐。
@@ -219,10 +220,13 @@ account: life
 | `python scripts/wxflow.py themes` | 查看主题名称 |
 | `python scripts/wxflow.py gallery` | 打开主题展示页；加 `--no-open` 仅生成页面 |
 | `python scripts/wxflow.py preview <稿件.md> --open` | 将已有 Markdown 渲染为 HTML 并打开预览 |
+| `python scripts/wxflow.py toutiao <稿件.layout.md> --open` | 生成 `.toutiao.html` 预览页和 `.toutiao.body.html` 正文片段 |
 | `python scripts/wxflow.py check <稿件.md>` | 本地推送检查，不调用公众号接口 |
 | `python scripts/wxflow.py push <稿件.md>` | 推送至公众号草稿箱 |
 
 以上 `<链接>`、`<稿件.md>` 等为占位符，运行时替换为实际值。`check`、`preview`、`push` 均可加 `--account <账号名>`。
+
+「导出头条」可以直接读取排版后的 Markdown。打开预览页，分别点击「复制标题」和「复制正文」，粘贴到头条文章编辑器，再核对配图和图片描述。
 
 ### 7. 测试与打包
 

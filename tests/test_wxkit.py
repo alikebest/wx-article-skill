@@ -14,10 +14,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import requests  # noqa: E402
+from bs4 import BeautifulSoup  # noqa: E402
 
 from datetime import date  # noqa: E402
 
-from wxkit import check, config, frontmatter, preview, push, wechat, workspace  # noqa: E402
+from wxkit import check, config, frontmatter, preview, push, toutiao, wechat, workspace  # noqa: E402
 from wxkit.naming import step_output  # noqa: E402
 from wxkit.themes import get_builder  # noqa: E402
 from wxkit.wechat import WeChat, WeChatError, truncate_units, wx_units  # noqa: E402
@@ -370,6 +371,33 @@ def test_preview():
             raise AssertionError("不应覆盖用户自己的 HTML")
         except FileExistsError:
             pass
+
+
+def test_toutiao_keeps_inline_bold_with_its_paragraph():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        image = root / "本地图.png"
+        image.write_bytes(PNG_1PX)
+        text = (
+            "## 第一节\n\n"
+            f"{'甲' * 79}，{'乙' * 32}，**行内强调。**\n\n"
+            "刚试了一下，**果然失败。**\n\n"
+            "## 第二节\n\n> 独立引用\n\n![配图说明](本地图.png)"
+        )
+        md = _article(root, "title: 预览<测试>", text, name="a.layout.md")
+        page, fragment, warnings = toutiao.build(md)
+        assert (page.name, fragment.name, warnings) == ("a.toutiao.html", "a.toutiao.body.html", [])
+        html = page.read_text(encoding="utf-8")
+        body = BeautifulSoup(html, "html.parser").select_one("#article-body")
+        assert [p.get_text() for p in body.find_all("p", recursive=False)] == [
+            f"{'甲' * 79}，", f"{'乙' * 32}，行内强调。", "刚试了一下，果然失败。",
+        ]
+        assert [p.strong.get_text() for p in body.select("p:has(> strong)")] == ["行内强调。", "果然失败。"]
+        assert [h.get_text() for h in body.select("h1")] == ["01 第一节", "02 第二节"]
+        assert len(body.select("hr")) == 1 and body.blockquote.get_text(strip=True) == "独立引用"
+        assert body.select_one(".pgc-img-caption").get_text() == "配图说明"
+        assert 'data:image/png;base64,' in html and '预览&lt;测试&gt;' in html
+        assert body.decode_contents() in fragment.read_text(encoding="utf-8")
 
 
 class FakeWx:

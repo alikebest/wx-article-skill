@@ -4,10 +4,10 @@ version: "1.0.1"
 license: PolyForm-Noncommercial-1.0.0
 display_name: "微信公众号快捷生成大师"
 display_name_en: "WeChat Article production workflow"
-description: "微信公众号文章工作流：新建文章、列出文章、抓取公众号文章（mp.weixin.qq.com 链接）、重写别人的文章、美化润色自己写的稿子、按主题排版并本地预览、推送到公众号草稿箱。用户提到公众号、草稿箱、公众号排版，要新写一篇公众号文章，要把文章改写/润色后发公众号，或者给出 mp.weixin.qq.com 链接时使用。每一步都可以单独用，输入任意 Markdown 文件。"
-description_zh: "微信公众号文章全流程工作流：新建文章、抓取、重写、美化润色、排版预览（11 套主题）、推送到草稿箱，每一步可单独使用，输入任意 Markdown 文件。"
-description_en: "Full WeChat Official Account article workflow: create, fetch, rewrite, polish, layout (11 themes) and push to draft box. Each step works independently with any Markdown file."
-argument-hint: "[新建|列出|抓取|重写|美化|排版|推送|模板列表] <链接或 md 路径>"
+description: "微信公众号文章工作流：新建文章、列出文章、抓取公众号文章（mp.weixin.qq.com 链接）、重写别人的文章、美化润色自己写的稿子、按主题排版并本地预览、导出今日头条排版、推送到公众号草稿箱。用户提到公众号、草稿箱、公众号排版、头条排版或导出头条，或者给出 mp.weixin.qq.com 链接时使用。每一步都可以单独用，输入任意 Markdown 文件。"
+description_zh: "微信公众号文章工作流：新建、抓取、重写、美化润色、排版预览（11 套主题）、导出今日头条排版、推送到草稿箱。"
+description_en: "WeChat Official Account article workflow: create, fetch, rewrite, polish, lay out (11 themes), export for Toutiao, and push to the WeChat draft box."
+argument-hint: "[新建|列出|抓取|重写|美化|排版|导出头条|推送|模板列表] <链接或 md 路径>"
 ---
 
 # 公众号文章工作流
@@ -22,6 +22,7 @@ argument-hint: "[新建|列出|抓取|重写|美化|排版|推送|模板列表] 
 | 重写 | Claude | 任意 md，通常是别人的文章 | `<名>.facts.md` + `<名>.rewrite.md` |
 | 美化 | Claude | 任意 md，通常是用户自己的稿子 | `<名>.polish.md` |
 | 排版 | Claude + 脚本 | 任意 md | `<名>.layout.md` + `<名>.layout.html`（预览页） |
+| 导出头条 | 脚本 | 优先用 `<名>.layout.md`，也支持其他 md | `<名>.toutiao.html`（预览和复制） + `<名>.toutiao.body.html`（正文片段） |
 | 推送 | 脚本 | 任意 md | 公众号草稿 + `<名>.push.md`（推送记录，追加写） |
 
 ## 判断用户要做哪一步
@@ -32,6 +33,7 @@ argument-hint: "[新建|列出|抓取|重写|美化|排版|推送|模板列表] 
 - 要把**别人的**文章"重写""改写""用自己的话写" → 重写
 - 要把**自己写的**稿子"润色""美化""整理一下" → 美化。拿不准稿子是谁写的，问一句
 - "排版""预览""看看效果""换个主题" → 排版
+- "导出头条""头条排版""复制到今日头条" → 导出头条。有现成 `.layout.md` 时直接使用。用户要求先排版时，排完再导出。
 - "模板列表""有哪些主题/模板""看看各个主题长什么样" → 运行 `gallery`，打开模板列表页（不需要文章，不联网）
 - "推送""发到草稿箱""发公众号" → 推送
 
@@ -59,6 +61,7 @@ argument-hint: "[新建|列出|抓取|重写|美化|排版|推送|模板列表] 
 | `fetch <链接> [--into 文件夹]` | 抓取文章。不带 `--into` 时新建文件夹；同一篇以前抓过就沿用原文件夹 |
 | `check <md> [--account 账号]` | 推送前检查，不联网、不耗配额。输出分错误/警告/提示三级 |
 | `preview <md> [--open] [--account 账号]` | 生成与 md 同名的 `.html` 预览页，`--open` 用浏览器打开 |
+| `toutiao <md> [--open]` | 生成头条预览页和正文 HTML 片段，`--open` 用浏览器打开 |
 | `push <md> [--account 账号]` | 推送到草稿箱。先自动检查，有错误就拒绝，不调用任何接口 |
 | `config` | 列出所有账号：哪个是默认、密钥填没填（不显示密钥）、作者名 |
 | `config --init` / `--add <账号名>` / `--default <账号名>` | 生成配置文件 / 新增账号 / 设置默认账号 |
@@ -131,6 +134,10 @@ argument-hint: "[新建|列出|抓取|重写|美化|排版|推送|模板列表] 
 ### 排版
 
 读 [references/layout.md](references/layout.md)。
+
+### 导出头条
+
+运行 `toutiao <名>.layout.md --open`。正文的 `**加粗**` 保留为段内加粗，Markdown 的 `>` 保留为引用。预览页可以分别复制标题和正文，再粘贴到头条文章编辑器。告诉用户两份输出的路径，提醒粘贴后核对配图和图片描述。
 
 ### 推送
 

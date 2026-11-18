@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""wx-article 统一入口：公众号文章的抓取、检查、预览、推送。
+"""wx-article 统一入口：公众号文章的抓取、检查、预览、推送，以及头条排版导出。
 
 一篇文章一个文件夹：<根目录>/<年-月-日-序号>/，如 2026-11-12-01，后续每一步的产物都写在里面。
   python wxflow.py new [--title 标题]                          新建文章 → <根目录>/<年-月-日-序号>/article.md
@@ -7,6 +7,7 @@
   python wxflow.py fetch <公众号文章链接> [--into 文件夹]       抓取 → 新建文件夹，抓过同一篇则沿用原文件夹
   python wxflow.py check <文章.md> [--account 账号]            推送前检查，不联网
   python wxflow.py preview <文章.md> [--open] [--account 账号] 生成本地预览页 <文章>.html，不联网
+  python wxflow.py toutiao <文章.layout.md> [--open]            生成头条预览和正文 HTML，不联网
   python wxflow.py push <文章.md> [更多.md ...] [--account 账号] 推送到草稿箱，记录写入 <文章>.push.md
   python wxflow.py config                                     查看所有账号的配置状态（不显示密钥）
   python wxflow.py config --init                              生成配置文件
@@ -108,6 +109,18 @@ def cmd_preview(args):
     return 0
 
 
+def cmd_toutiao(args):
+    from wxkit import toutiao
+    preview, fragment, warnings = toutiao.build(_existing(args.md))
+    print(f"头条预览：{preview}")
+    print(f"正文片段：{fragment}")
+    for warning in warnings:
+        print(f"[提示] {warning}")
+    if args.open:
+        webbrowser.open(preview.resolve().as_uri())
+    return 0
+
+
 def cmd_push(args):
     from wxkit import config, frontmatter, push
     from wxkit.wechat import WeChat
@@ -194,7 +207,7 @@ def _existing(p) -> Path:
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog="wxflow.py", description="公众号文章：新建 / 列出 / 抓取 / 检查 / 预览 / 推送",
+    parser = argparse.ArgumentParser(prog="wxflow.py", description="公众号文章：新建 / 列出 / 抓取 / 检查 / 预览 / 导出头条 / 推送",
                                      formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True, metavar="命令")
     account_help = "用哪个公众号账号（配置里的账号名），优先于文章头信息里的 account"
@@ -227,6 +240,11 @@ def main(argv=None):
     p.add_argument("--open", action="store_true", help="生成后用浏览器打开")
     p.add_argument("--account", help=account_help)
     p.set_defaults(func=cmd_preview)
+
+    p = sub.add_parser("toutiao", help="从 Markdown 导出今日头条排版（不联网）")
+    p.add_argument("md", metavar="文章.layout.md")
+    p.add_argument("--open", action="store_true", help="生成后用浏览器打开")
+    p.set_defaults(func=cmd_toutiao)
 
     p = sub.add_parser("push", help="推送到草稿箱")
     p.add_argument("md", nargs="+")
